@@ -1,6 +1,40 @@
+import os
+import sys
 import time
+import subprocess
 import streamlit as st
 from harvester import DocHarvester, DEFAULT_USER_AGENT
+
+
+def select_folder_dialog(initial_dir: str = "./") -> str:
+    """Open macOS native Finder folder selection dialog via osascript, or fallback to Tkinter."""
+    # 1. macOS native Finder folder chooser via osascript
+    if sys.platform == "darwin":
+        try:
+            cmd = 'POSIX path of (choose folder with prompt "DocHarvester - 저장 디렉토리 폴더 선택")'
+            res = subprocess.run(["osascript", "-e", cmd], capture_output=True, text=True, timeout=60)
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip().rstrip("/")
+        except Exception:
+            pass
+
+    # 2. Fallback to Tkinter for Windows/Linux or fallback
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        init_path = os.path.abspath(initial_dir) if os.path.exists(initial_dir) else os.path.expanduser("~")
+        folder_selected = filedialog.askdirectory(
+            initialdir=init_path,
+            title="DocHarvester - 저장 디렉토리 폴더 선택"
+        )
+        root.destroy()
+        return folder_selected.rstrip("/") if folder_selected else ""
+    except Exception:
+        return ""
 
 # -----------------------------------------------------------------------------
 # Streamlit Page Config & Custom Styling
@@ -78,6 +112,10 @@ if "target_url" not in st.session_state:
     st.session_state.target_url = ""
 if "additional_urls_text" not in st.session_state:
     st.session_state.additional_urls_text = ""
+if "output_dir" not in st.session_state:
+    st.session_state.output_dir = "./output"
+if "saved_file_path" not in st.session_state:
+    st.session_state.saved_file_path = ""
 
 
 # -----------------------------------------------------------------------------
@@ -196,14 +234,28 @@ with st.sidebar:
     st.divider()
 
     # 3. Output Settings
-    st.subheader("📄 출력 파일 설정")
-    output_filename = st.text_input(
-        "저장할 파일명 (.md)",
-        value="AI-Product-Studio-Handbook.md",
-        help="다운로드 및 통합 생성될 Markdown 파일 이름을 지정합니다."
-    )
-    if not output_filename.endswith(".md"):
-        output_filename += ".md"
+    st.subheader("3. 📄 출력 파일 및 저장 경로 설정")
+    
+    col_fname, col_folder = st.columns([2.8, 1.2])
+    with col_fname:
+        output_filename = st.text_input(
+            "저장할 파일명 (.md)",
+            value="AI-Product-Studio-Handbook.md",
+            help="다운로드 및 통합 생성될 Markdown 파일 이름을 지정합니다."
+        )
+        if not output_filename.endswith(".md"):
+            output_filename += ".md"
+
+    with col_folder:
+        st.write(" ")
+        st.write(" ")
+        if st.button("📁 폴더 선택", help="Finder / 파일 탐색기를 열어 저장할 폴더를 직접 선택합니다.", use_container_width=True):
+            chosen = select_folder_dialog(st.session_state.output_dir)
+            if chosen:
+                st.session_state.output_dir = chosen
+                st.rerun()
+
+    st.caption(f"📂 **현재 저장 경로**: `{st.session_state.output_dir}`")
 
     st.divider()
 
@@ -267,12 +319,21 @@ if run_button:
             doc_title = output_filename.rsplit(".", 1)[0].replace("-", " ").replace("_", " ").title()
             combined_md = DocHarvester.build_combined_markdown(results, document_title=doc_title)
 
+            # Auto-save to specified local directory
+            save_directory = os.path.abspath(st.session_state.output_dir)
+            os.makedirs(save_directory, exist_ok=True)
+            full_saved_path = os.path.join(save_directory, output_filename)
+            
+            with open(full_saved_path, "w", encoding="utf-8") as f:
+                f.write(combined_md)
+
             # Store in session state
             st.session_state.harvest_results = results
             st.session_state.combined_markdown = combined_md
+            st.session_state.saved_file_path = full_saved_path
             st.session_state.is_harvesting = False
             
-            st.toast(f"🎉 성공적으로 수집을 마쳤습니다! ({elapsed_time:.1f}초 소요)", icon="🎉")
+            st.toast(f"🎉 수집 완료 및 파일 저장 성공! ({elapsed_time:.1f}초 소요)", icon="🎉")
 
 # -----------------------------------------------------------------------------
 # Results Display Dashboard
@@ -353,8 +414,11 @@ if st.session_state.harvest_results:
 
     # --- TAB 3: DOWNLOAD ---
     with tab_export:
-        st.subheader("📥 Markdown 파일 다운로드")
-        st.info(f"💡 생성된 **`{output_filename}`** 파일은 즉시 다운로드하여 Gemini Gem, ChatGPT Custom GPT, Claude Projects Knowledge 문서로 업로드할 수 있습니다.")
+        st.subheader("📥 Markdown 파일 저장 및 다운로드")
+        if st.session_state.saved_file_path:
+            st.success(f"💾 **로컬 디스크에 자동으로 저장되었습니다**:\n`{st.session_state.saved_file_path}`")
+        
+        st.info(f"💡 생성된 **`{output_filename}`** 파일은 웹 브라우저에서 직접 다운로드받거나 위의 로컬 디스크 저장 경로에서 바로 확인하여 LLM Knowledge Base로 활용하실 수 있습니다.")
         
         st.download_button(
             label=f"📥 {output_filename} 다운로드",
