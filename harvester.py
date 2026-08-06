@@ -16,13 +16,31 @@ DEFAULT_USER_AGENT = (
 
 # Unwanted elements to decompose
 REMOVE_TAGS = [
-    "script", "style", "nav", "footer", "header", "aside", 
-    "iframe", "noscript", "form", "svg", "button", "input"
+    "script",
+    "style",
+    "nav",
+    "footer",
+    "header",
+    "aside",
+    "iframe",
+    "noscript",
+    "form",
+    "svg",
+    "button",
+    "input",
 ]
 
 REMOVE_CLASSES = [
-    "sidebar", "nav", "navbar", "footer", "header", "menu",
-    "cookie-banner", "advertisement", "ad-container", "social-share"
+    "sidebar",
+    "nav",
+    "navbar",
+    "footer",
+    "header",
+    "menu",
+    "cookie-banner",
+    "advertisement",
+    "ad-container",
+    "social-share",
 ]
 
 MAIN_CONTENT_SELECTORS = [
@@ -35,21 +53,44 @@ MAIN_CONTENT_SELECTORS = [
     ".documentation",
     ".markdown-body",
     ".docs-content",
-    "#main-content"
+    "#main-content",
 ]
 
 IGNORED_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico",
-    ".pdf", ".zip", ".tar", ".gz", ".7z", ".rar",
-    ".mp3", ".mp4", ".avi", ".mov", ".wav",
-    ".css", ".js", ".json", ".xml"
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".7z",
+    ".rar",
+    ".mp3",
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".wav",
+    ".css",
+    ".js",
+    ".json",
+    ".xml",
 }
 
 
 class DocHarvester:
     """Core Web Scraper & Markdown Converter for DocHarvester."""
 
-    def __init__(self, user_agent: str = DEFAULT_USER_AGENT, timeout: int = 15, delay: float = 0.5):
+    def __init__(
+        self,
+        user_agent: str = DEFAULT_USER_AGENT,
+        timeout: int = 15,
+        delay: float = 0.5,
+    ):
         self.user_agent = user_agent
         self.timeout = timeout
         self.delay = delay
@@ -58,18 +99,18 @@ class DocHarvester:
 
     def fetch_page(self, url: str) -> Tuple[Optional[str], int, Optional[str]]:
         """Fetch raw HTML content from a target URL.
-        
+
         Returns:
             (html_content, status_code, error_message)
         """
         try:
             response = self.session.get(url, timeout=self.timeout, allow_redirects=True)
             response.raise_for_status()
-            
+
             # UTF-8 decoding priority
-            if response.encoding is None or response.encoding.lower() == 'iso-8859-1':
-                response.encoding = response.apparent_encoding or 'utf-8'
-                
+            if response.encoding is None or response.encoding.lower() == "iso-8859-1":
+                response.encoding = response.apparent_encoding or "utf-8"
+
             return response.text, response.status_code, None
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code if e.response is not None else 0
@@ -85,7 +126,7 @@ class DocHarvester:
 
     def check_crawlability(self, url: str) -> Dict:
         """Diagnose a target URL to check whether it is scrapable and return reason if failed.
-        
+
         Returns:
             {
                 "is_scrapable": bool,
@@ -109,14 +150,18 @@ class DocHarvester:
             if status_code == 403 or status_code == 429:
                 server_hdr = response.headers.get("Server", "").lower()
                 is_cf = "cloudflare" in server_hdr or "cf-ray" in response.headers
-                reason = "403/429 Forbidden (Cloudflare/WAF 보안 봇 방화벽에 의해 차단됨)" if is_cf else f"HTTP {status_code} Access Denied (접근 거부됨)"
+                reason = (
+                    "403/429 Forbidden (Cloudflare/WAF 보안 봇 방화벽에 의해 차단됨)"
+                    if is_cf
+                    else f"HTTP {status_code} Access Denied (접근 거부됨)"
+                )
                 return {
                     "is_scrapable": False,
                     "status_code": status_code,
                     "reason": reason,
                     "title": "",
                     "content_type": content_type,
-                    "html_length": 0
+                    "html_length": 0,
                 }
             elif status_code == 404:
                 return {
@@ -125,7 +170,7 @@ class DocHarvester:
                     "reason": "404 Not Found (존재하지 않는 페이지 주소)",
                     "title": "",
                     "content_type": content_type,
-                    "html_length": 0
+                    "html_length": 0,
                 }
             elif status_code >= 400:
                 return {
@@ -134,7 +179,7 @@ class DocHarvester:
                     "reason": f"HTTP {status_code} 오류 발생",
                     "title": "",
                     "content_type": content_type,
-                    "html_length": 0
+                    "html_length": 0,
                 }
 
             # Check Content Type
@@ -145,7 +190,7 @@ class DocHarvester:
                     "reason": f"비 HTML 파일 형식입니다 ({content_type}). 본문 텍스트 스크래핑에 적합하지 않습니다.",
                     "title": "",
                     "content_type": content_type,
-                    "html_length": len(response.content)
+                    "html_length": len(response.content),
                 }
 
             # Title extraction test
@@ -162,7 +207,7 @@ class DocHarvester:
                 "reason": "🟢 정상 수집 가능 (HTTP 200 OK)",
                 "title": title,
                 "content_type": content_type,
-                "html_length": len(response.text)
+                "html_length": len(response.text),
             }
 
         except requests.exceptions.Timeout:
@@ -172,7 +217,7 @@ class DocHarvester:
                 "reason": "요청 시간 초과 (서버 응답 지연 또는 방화벽 차단)",
                 "title": "",
                 "content_type": "",
-                "html_length": 0
+                "html_length": 0,
             }
         except requests.exceptions.SSLError:
             return {
@@ -181,7 +226,7 @@ class DocHarvester:
                 "reason": "SSL/TLS 보안 인증서 오류 (해당 사이트의 보안 설정 문제)",
                 "title": "",
                 "content_type": "",
-                "html_length": 0
+                "html_length": 0,
             }
         except requests.exceptions.RequestException as e:
             return {
@@ -190,7 +235,7 @@ class DocHarvester:
                 "reason": f"네트워크 접속 실패: {str(e)}",
                 "title": "",
                 "content_type": "",
-                "html_length": 0
+                "html_length": 0,
             }
         except Exception as e:
             return {
@@ -199,12 +244,12 @@ class DocHarvester:
                 "reason": f"알 수 없는 오류: {str(e)}",
                 "title": "",
                 "content_type": "",
-                "html_length": 0
+                "html_length": 0,
             }
 
     def quick_scan_sublinks(self, base_url: str) -> Dict:
         """Scan a base URL to discover available internal sublinks count before full crawling.
-        
+
         Returns:
             {
                 "total_count": int,
@@ -225,7 +270,7 @@ class DocHarvester:
                 "sublinks": [],
                 "base_domain": urlparse(base_url).netloc,
                 "status_code": status_code,
-                "error": error
+                "error": error,
             }
 
         sublinks = self.extract_sublinks(base_url, html)
@@ -234,12 +279,12 @@ class DocHarvester:
             "sublinks": sublinks,
             "base_domain": urlparse(base_url).netloc,
             "status_code": status_code,
-            "error": None
+            "error": None,
         }
 
     def clean_and_extract(self, html: str, base_url: str = "") -> Tuple[str, str]:
         """Clean unwanted tags from HTML and extract main body content & page title.
-        
+
         Returns:
             (page_title, cleaned_html_string)
         """
@@ -269,7 +314,7 @@ class DocHarvester:
                 classes_str = " ".join(classes).lower()
             else:
                 classes_str = str(classes).lower()
-            
+
             if any(rem in classes_str for rem in REMOVE_CLASSES):
                 tag.decompose()
 
@@ -300,9 +345,9 @@ class DocHarvester:
             h.baseurl = base_url
 
         markdown_text = h.handle(html_str)
-        
+
         # Clean up excessive blank lines (more than 2 consecutive newlines)
-        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
+        markdown_text = re.sub(r"\n{3,}", "\n\n", markdown_text)
         return markdown_text.strip()
 
     def extract_sublinks(self, base_url: str, html: str) -> List[str]:
@@ -310,12 +355,12 @@ class DocHarvester:
         soup = BeautifulSoup(html, "html.parser")
         parsed_base = urlparse(base_url)
         base_domain = parsed_base.netloc.lower()
-        
+
         # Normalize base path to keep sub-path restrictiveness
         base_path = parsed_base.path
-        if not base_path.endswith('/'):
+        if not base_path.endswith("/"):
             # e.g., /docs/guide -> /docs/
-            base_dir = base_path.rsplit('/', 1)[0] + '/'
+            base_dir = base_path.rsplit("/", 1)[0] + "/"
         else:
             base_dir = base_path
 
@@ -343,11 +388,13 @@ class DocHarvester:
                 continue
 
             # Remove fragment/query string for URL normalization
-            clean_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', '', ''))
-            
+            clean_url = urlunparse(
+                (parsed_url.scheme, parsed_url.netloc, parsed_url.path, "", "", "")
+            )
+
             # Make sure clean_url is not just trailing slash difference
-            clean_url = clean_url.rstrip('/')
-            
+            clean_url = clean_url.rstrip("/")
+
             valid_links.add(clean_url)
 
         return sorted(list(valid_links))
@@ -367,7 +414,7 @@ class DocHarvester:
                 "char_count": 0,
                 "status": "Failed",
                 "status_code": status_code,
-                "error": error
+                "error": error,
             }
 
         title, cleaned_html = self.clean_and_extract(html, base_url=url)
@@ -380,13 +427,13 @@ class DocHarvester:
             "char_count": len(markdown),
             "status": "Success",
             "status_code": status_code,
-            "error": None
+            "error": None,
         }
 
     def harvest_multi(
-        self, 
-        urls: List[str], 
-        progress_callback: Optional[Callable[[int, int, str], None]] = None
+        self,
+        urls: List[str],
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> List[Dict]:
         """Harvest a list of URLs sequentially."""
         results = []
@@ -403,22 +450,22 @@ class DocHarvester:
         return results
 
     def harvest_depth(
-        self, 
-        start_url: str, 
-        max_depth: int = 1, 
+        self,
+        start_url: str,
+        max_depth: int = 1,
         max_pages: int = 20,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> List[Dict]:
         """Harvest starting from start_url and explore sublinks up to max_depth using BFS."""
         start_url = start_url.strip()
         if not start_url.startswith(("http://", "https://")):
             start_url = "https://" + start_url
 
-        start_clean = urlunparse(urlparse(start_url)._replace(fragment="")).rstrip('/')
-        
+        start_clean = urlunparse(urlparse(start_url)._replace(fragment="")).rstrip("/")
+
         visited: Set[str] = set()
         results: List[Dict] = []
-        queue = deque([(start_clean, 0)]) # (url, current_depth)
+        queue = deque([(start_clean, 0)])  # (url, current_depth)
         visited.add(start_clean)
 
         processed_count = 0
@@ -429,40 +476,44 @@ class DocHarvester:
 
             if progress_callback:
                 progress_callback(
-                    processed_count, 
-                    max_pages, 
-                    f"[Depth {current_depth}] Scraping ({processed_count}/{max_pages}): {current_url}"
+                    processed_count,
+                    max_pages,
+                    f"[Depth {current_depth}] Scraping ({processed_count}/{max_pages}): {current_url}",
                 )
 
             # Fetch page
             html, status_code, error = self.fetch_page(current_url)
             if error or not html:
-                results.append({
-                    "url": current_url,
-                    "title": "Failed Page",
-                    "markdown": "",
-                    "char_count": 0,
-                    "status": "Failed",
-                    "status_code": status_code,
-                    "error": error,
-                    "depth": current_depth
-                })
+                results.append(
+                    {
+                        "url": current_url,
+                        "title": "Failed Page",
+                        "markdown": "",
+                        "char_count": 0,
+                        "status": "Failed",
+                        "status_code": status_code,
+                        "error": error,
+                        "depth": current_depth,
+                    }
+                )
                 time.sleep(self.delay)
                 continue
 
             title, cleaned_html = self.clean_and_extract(html, base_url=current_url)
             markdown = self.convert_html_to_md(cleaned_html, base_url=current_url)
 
-            results.append({
-                "url": current_url,
-                "title": title,
-                "markdown": markdown,
-                "char_count": len(markdown),
-                "status": "Success",
-                "status_code": status_code,
-                "error": None,
-                "depth": current_depth
-            })
+            results.append(
+                {
+                    "url": current_url,
+                    "title": title,
+                    "markdown": markdown,
+                    "char_count": len(markdown),
+                    "status": "Success",
+                    "status_code": status_code,
+                    "error": None,
+                    "depth": current_depth,
+                }
+            )
 
             # Find sublinks if depth allows
             if current_depth < max_depth:
@@ -477,10 +528,15 @@ class DocHarvester:
         return results
 
     @staticmethod
-    def build_combined_markdown(scraped_pages: List[Dict], document_title: str = "DocHarvester Collection") -> str:
+    def build_combined_markdown(
+        scraped_pages: List[Dict],
+        document_title: str = "DocHarvester Collection",
+        include_toc: bool = True,
+        include_metadata: bool = True,
+    ) -> str:
         """Combine multiple scraped page results into a single structured Markdown file."""
         successful_pages = [p for p in scraped_pages if p["status"] == "Success"]
-        
+
         if not successful_pages:
             return f"# {document_title}\n\n*No pages were successfully harvested.*"
 
@@ -490,25 +546,27 @@ class DocHarvester:
             "> Created by DocHarvester - Web-to-Markdown Knowledge Builder",
             f"> Total Harvested Pages: {len(successful_pages)}",
             "",
-            "## 📋 Table of Contents",
-            ""
         ]
 
-        # Table of contents
-        for idx, page in enumerate(successful_pages, 1):
-            clean_title = page["title"].replace("[", "\\[").replace("]", "\\]")
-            lines.append(f"{idx}. [{clean_title}](#page-{idx})")
-
-        lines.append("\n---\n")
+        # Table of contents (if enabled)
+        if include_toc:
+            lines.append("## 📋 Table of Contents")
+            lines.append("")
+            for idx, page in enumerate(successful_pages, 1):
+                clean_title = page["title"].replace("[", "\\[").replace("]", "\\]")
+                lines.append(f"{idx}. [{clean_title}](#page-{idx})")
+            lines.append("\n---\n")
 
         # Page sections
         for idx, page in enumerate(successful_pages, 1):
-            lines.append(f"<a id='page-{idx}'></a>")
-            lines.append(f"## {idx}. {page['title']}")
-            lines.append(f"**Source URL**: [{page['url']}]({page['url']})")
-            if "depth" in page:
-                lines.append(f"**Crawl Depth**: {page['depth']}")
-            lines.append("")
+            if include_metadata:
+                lines.append(f"<a id='page-{idx}'></a>")
+                lines.append(f"## {idx}. {page['title']}")
+                lines.append(f"**Source URL**: [{page['url']}]({page['url']})")
+                if "depth" in page:
+                    lines.append(f"**Crawl Depth**: {page['depth']}")
+                lines.append("")
+
             lines.append(page["markdown"])
             lines.append("\n---\n")
 

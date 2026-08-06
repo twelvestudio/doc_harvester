@@ -139,6 +139,10 @@ if "output_dir" not in st.session_state:
     st.session_state.output_dir = "./output"
 if "saved_file_path" not in st.session_state:
     st.session_state.saved_file_path = ""
+if "include_toc" not in st.session_state:
+    st.session_state.include_toc = True
+if "include_metadata" not in st.session_state:
+    st.session_state.include_metadata = True
 
 
 # -----------------------------------------------------------------------------
@@ -312,6 +316,12 @@ with st.sidebar:
                 st.session_state.output_dir = chosen
                 st.rerun()
 
+    st.markdown("**📄 Markdown 구성 옵션**")
+    include_toc = st.checkbox("📋 목차 (Table of Contents) 포함", value=st.session_state.include_toc)
+    include_metadata = st.checkbox("🏷️ 페이지 정보 (타이틀, Source URL, Depth) 메타데이터 포함", value=st.session_state.include_metadata)
+    st.session_state.include_toc = include_toc
+    st.session_state.include_metadata = include_metadata
+
     st.divider()
 
     # 4. Advanced Settings Accordion
@@ -390,7 +400,10 @@ if run_button:
                 .title()
             )
             combined_md = DocHarvester.build_combined_markdown(
-                results, document_title=doc_title
+                results,
+                document_title=doc_title,
+                include_toc=st.session_state.include_toc,
+                include_metadata=st.session_state.include_metadata,
             )
 
             # Auto-save to specified local directory

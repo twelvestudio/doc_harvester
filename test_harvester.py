@@ -101,6 +101,29 @@ class TestDocHarvester(unittest.TestCase):
         self.assertIn("## 1. Page 1 Title", combined_md)
         self.assertIn("## 2. Page 2 Title", combined_md)
 
+    def test_build_combined_markdown_without_toc_and_metadata(self):
+        scraped_pages = [
+            {
+                "url": "https://example.com/page1",
+                "title": "Page 1 Title",
+                "markdown": "# Page 1 Content\nSome paragraph text.",
+                "char_count": 50,
+                "status": "Success"
+            }
+        ]
+        
+        combined_md = DocHarvester.build_combined_markdown(
+            scraped_pages, 
+            document_title="Clean Body Only Docs",
+            include_toc=False,
+            include_metadata=False
+        )
+        
+        self.assertIn("# 🌾 Clean Body Only Docs", combined_md)
+        self.assertNotIn("Table of Contents", combined_md)
+        self.assertNotIn("Source URL", combined_md)
+        self.assertIn("# Page 1 Content", combined_md)
+
     def test_check_crawlability_invalid_url(self):
         result = self.harvester.check_crawlability("https://invalid-non-existent-domain-12345.org")
         self.assertFalse(result["is_scrapable"])
