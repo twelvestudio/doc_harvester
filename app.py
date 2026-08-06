@@ -42,6 +42,14 @@ def select_folder_dialog(initial_dir: str = "./") -> str:
         return ""
 
 
+def auto_diagnose_url():
+    url = st.session_state.get("target_url_input_key", "").strip()
+    st.session_state.target_url = url
+    if url:
+        harvester_diag = DocHarvester(user_agent=DEFAULT_USER_AGENT, timeout=15)
+        st.session_state.diag_result = harvester_diag.check_crawlability(url)
+
+
 # -----------------------------------------------------------------------------
 # Streamlit Page Config & Custom Styling
 # -----------------------------------------------------------------------------
@@ -156,13 +164,15 @@ with st.sidebar:
     # Harvester instance for diagnosis
     harvester_diag = DocHarvester(user_agent=DEFAULT_USER_AGENT, timeout=15)
 
-    # STEP 1: Top Shared URL Input
+    # STEP 1: Top Shared URL Input (with auto-diagnose on Enter)
     st.subheader("1. 🔗 웹사이트 URL 입력")
     target_url_input = st.text_input(
         "타겟 URL (대표 주소)",
         value=st.session_state.target_url,
         placeholder="https://docs.example.com/guide/",
-        help="수집할 웹사이트 메인 URL 또는 시작 URL을 입력하세요.",
+        help="URL 입력 후 엔터(Enter)를 누르면 크롤링 가능 여부가 즉시 진단됩니다.",
+        key="target_url_input_key",
+        on_change=auto_diagnose_url,
     )
     st.session_state.target_url = target_url_input.strip()
 
@@ -245,9 +255,8 @@ with st.sidebar:
                 "최대 페이지 수",
                 min_value=1,
                 max_value=100,
-                value=st.session_state.custom_max_pages,
+                value=int(st.session_state.custom_max_pages),
                 step=5,
-                key="max_pages_input",
             )
             st.session_state.custom_max_pages = max_pages
 
@@ -272,7 +281,7 @@ with st.sidebar:
                         f"⚡ 최대 페이지 수에 {pscan['total_count']}개 즉시 반영",
                         use_container_width=True,
                     ):
-                        st.session_state.custom_max_pages = pscan["total_count"]
+                        st.session_state.custom_max_pages = min(max(int(pscan["total_count"]), 1), 100)
                         st.rerun()
 
     st.divider()
