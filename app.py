@@ -143,6 +143,14 @@ if "include_toc" not in st.session_state:
     st.session_state.include_toc = True
 if "include_metadata" not in st.session_state:
     st.session_state.include_metadata = True
+if "discovered_links" not in st.session_state:
+    st.session_state.discovered_links = []
+if "exclude_keywords_input" not in st.session_state:
+    st.session_state.exclude_keywords_input = (
+        "login, terms, privacy, auth, pdf, download"
+    )
+if "max_pages_limit" not in st.session_state:
+    st.session_state.max_pages_limit = 100
 
 
 # -----------------------------------------------------------------------------
@@ -258,18 +266,34 @@ with st.sidebar:
             max_pages = st.number_input(
                 "최대 페이지 수",
                 min_value=1,
-                max_value=100,
-                value=int(st.session_state.custom_max_pages),
+                max_value=int(st.session_state.max_pages_limit),
+                value=int(
+                    min(
+                        st.session_state.custom_max_pages,
+                        st.session_state.max_pages_limit,
+                    )
+                ),
                 step=5,
             )
             st.session_state.custom_max_pages = max_pages
 
         if st.session_state.target_url:
             if st.button("🔎 하위링크 사전스캔", use_container_width=True):
-                with st.spinner("하위 링크 개수 조사 중..."):
-                    st.session_state.prescan_result = (
-                        harvester_diag.quick_scan_sublinks(st.session_state.target_url)
+                with st.spinner("하위 링크 개수 및 주소 탐색 중..."):
+                    res = harvester_diag.quick_scan_sublinks(
+                        st.session_state.target_url
                     )
+                    st.session_state.prescan_result = res
+                    if res.get("sublinks"):
+                        st.session_state.discovered_links = (
+                            DocHarvester.filter_sublinks_by_keywords(
+                                res["sublinks"], st.session_state.exclude_keywords_input
+                            )
+                        )
+                        st.session_state.custom_max_pages = min(
+                            max(int(res["total_count"]), 1),
+                            int(st.session_state.max_pages_limit),
+                        )
 
         # Render Sublink Pre-scan Results
         if st.session_state.prescan_result:
@@ -277,16 +301,14 @@ with st.sidebar:
             if pscan["error"]:
                 st.warning(f"⚠️ 하위 링크 스캔 실패: {pscan['error']}")
             else:
-                st.info(
-                    f"📊 **발견된 하위 링크**: **{pscan['total_count']}개** (`{pscan['base_domain']}`)"
+                selected_count = sum(
+                    1
+                    for item in st.session_state.discovered_links
+                    if item.get("selected")
                 )
-                if pscan["total_count"] > 0:
-                    if st.button(
-                        f"⚡ 최대 페이지 수에 {pscan['total_count']}개 즉시 반영",
-                        use_container_width=True,
-                    ):
-                        st.session_state.custom_max_pages = min(max(int(pscan["total_count"]), 1), 100)
-                        st.rerun()
+                st.info(
+                    f"📊 **발견된 하위 링크**: **{pscan['total_count']}개** (선택됨: {selected_count}개)"
+                )
 
     st.divider()
 
@@ -317,8 +339,13 @@ with st.sidebar:
                 st.rerun()
 
     st.markdown("**📄 Markdown 구성 옵션**")
-    include_toc = st.checkbox("📋 목차 (Table of Contents) 포함", value=st.session_state.include_toc)
-    include_metadata = st.checkbox("🏷️ 페이지 정보 (타이틀, Source URL, Depth) 메타데이터 포함", value=st.session_state.include_metadata)
+    include_toc = st.checkbox(
+        "📋 목차 (Table of Contents) 포함", value=st.session_state.include_toc
+    )
+    include_metadata = st.checkbox(
+        "🏷️ 페이지 정보 (타이틀, Source URL, Depth) 메타데이터 포함",
+        value=st.session_state.include_metadata,
+    )
     st.session_state.include_toc = include_toc
     st.session_state.include_metadata = include_metadata
 
@@ -326,6 +353,16 @@ with st.sidebar:
 
     # 4. Advanced Settings Accordion
     with st.expander("🛠️ 고급 네트워크 설정", expanded=False):
+        max_pages_limit = st.number_input(
+            "최대 상한 페이지 수 제한",
+            min_value=10,
+            max_value=1000,
+            value=int(st.session_state.max_pages_limit),
+            step=10,
+            help="크롤링 시 최대로 허용할 수집 페이지 상한선(10 ~ 1000)을 설정합니다.",
+        )
+        st.session_state.max_pages_limit = max_pages_limit
+
         custom_ua = st.text_input("User-Agent Header", value=DEFAULT_USER_AGENT)
         req_timeout = st.slider(
             "요청 타임아웃 (초)", min_value=5, max_value=60, value=15
@@ -345,6 +382,94 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 # Main Content Area & Scraper Execution
 # -----------------------------------------------------------------------------
+
+# Main Area Sub-link Selector Panel (Options 2 & 3 Combined)
+if (
+    scope_option == "하위 링크 포함 (Depth Crawling)"
+    and st.session_state.discovered_links
+):
+    with st.expander("🔎 수집 대상 하위 링크 선별 & 키워드 필터 패널", expanded=True):
+        st.markdown(
+            "스캔된 하위 링크 중 수집할 문서를 체크/해제하거나, 자동 제외 키워드를 등록하세요."
+        )
+
+        col_kw1, col_kw2 = st.columns([3.5, 1.5])
+        with col_kw1:
+            kw_input = st.text_input(
+                "🚫 자동 제외 키워드 (쉼표 구분)",
+                value=st.session_state.exclude_keywords_input,
+                help="입력한 단어가 포함된 URL은 아래 목록에서 자동으로 체크 해제됩니다.",
+            )
+            st.session_state.exclude_keywords_input = kw_input
+        with col_kw2:
+            st.write(" ")
+            st.write(" ")
+            if st.button("🔄 키워드 필터 재적용", use_container_width=True):
+                raw_urls = [item["url"] for item in st.session_state.discovered_links]
+                st.session_state.discovered_links = (
+                    DocHarvester.filter_sublinks_by_keywords(
+                        raw_urls, st.session_state.exclude_keywords_input
+                    )
+                )
+                st.rerun()
+
+        # Selection Control Buttons & Stats
+        col_btn1, col_btn2, col_stat = st.columns([1, 1, 3])
+        with col_btn1:
+            if st.button("☑️ 전체 선택", use_container_width=True):
+                for item in st.session_state.discovered_links:
+                    item["selected"] = True
+                st.session_state.custom_max_pages = min(
+                    max(len(st.session_state.discovered_links), 1),
+                    int(st.session_state.max_pages_limit),
+                )
+                st.rerun()
+        with col_btn2:
+            if st.button("☐ 전체 해제", use_container_width=True):
+                for item in st.session_state.discovered_links:
+                    item["selected"] = False
+                st.session_state.custom_max_pages = 1
+                st.rerun()
+
+        selected_count = sum(
+            1 for item in st.session_state.discovered_links if item.get("selected")
+        )
+        total_count = len(st.session_state.discovered_links)
+
+        with col_stat:
+            st.info(
+                f"📊 **선택된 수집 대상 문서**: **{selected_count}개** / 총 발견된 링크 {total_count}개 (사이드바 최대 페이지 수 연동됨)"
+            )
+
+        # Interactive Data Editor Table in Wide Main View
+        edited_links = st.data_editor(
+            st.session_state.discovered_links,
+            column_config={
+                "selected": st.column_config.CheckboxColumn(
+                    "수집 선택", help="수집할 문서만 체크하세요"
+                ),
+                "url": st.column_config.LinkColumn(
+                    "수집 대상 URL 주소", help="페이지 URL"
+                ),
+                "depth": st.column_config.NumberColumn("Crawl Depth", format="%d"),
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="sublinks_editor_table",
+        )
+        st.session_state.discovered_links = edited_links
+
+        # Auto-sync custom_max_pages to selected_count
+        new_selected_count = sum(1 for item in edited_links if item.get("selected"))
+        if (
+            new_selected_count > 0
+            and new_selected_count != st.session_state.custom_max_pages
+        ):
+            st.session_state.custom_max_pages = min(
+                max(new_selected_count, 1), int(st.session_state.max_pages_limit)
+            )
+    st.markdown("---")
+
 
 # Handle Execution
 if run_button:
@@ -380,15 +505,34 @@ if run_button:
                 status_text.success(f"✅ 총 {len(results)}개 페이지 멀티 수집 완료!")
 
             elif scope_option == "하위 링크 포함 (Depth Crawling)":
-                results = harvester.harvest_depth(
-                    start_url=urls_to_crawl[0],
-                    max_depth=max_depth,
-                    max_pages=max_pages,
-                    progress_callback=update_progress,
+                # Check if user selected specific sublinks from main table
+                selected_sub_urls = (
+                    [
+                        item["url"]
+                        for item in st.session_state.discovered_links
+                        if item.get("selected")
+                    ]
+                    if st.session_state.discovered_links
+                    else []
                 )
-                status_text.success(
-                    f"✅ Depth {max_depth} 탐색 완료! (총 {len(results)}개 페이지 수집)"
-                )
+
+                if selected_sub_urls:
+                    results = harvester.harvest_multi(
+                        selected_sub_urls, progress_callback=update_progress
+                    )
+                    status_text.success(
+                        f"✅ 선별된 {len(results)}개 하위 링크 수집 완료!"
+                    )
+                else:
+                    results = harvester.harvest_depth(
+                        start_url=urls_to_crawl[0],
+                        max_depth=max_depth,
+                        max_pages=max_pages,
+                        progress_callback=update_progress,
+                    )
+                    status_text.success(
+                        f"✅ Depth {max_depth} 탐색 완료! (총 {len(results)}개 페이지 수집)"
+                    )
 
             elapsed_time = time.time() - start_time
 

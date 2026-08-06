@@ -282,6 +282,21 @@ class DocHarvester:
             "error": None,
         }
 
+    @staticmethod
+    def filter_sublinks_by_keywords(sublinks: List[str], exclude_keywords_str: str) -> List[Dict]:
+        """Convert sublink strings to structured dicts and apply exclude keyword filtering."""
+        keywords = [k.strip().lower() for k in exclude_keywords_str.split(",") if k.strip()]
+        result = []
+        for url in sublinks:
+            url_lower = url.lower()
+            is_excluded = any(kw in url_lower for kw in keywords) if keywords else False
+            result.append({
+                "selected": not is_excluded,
+                "url": url,
+                "depth": 1
+            })
+        return result
+
     def clean_and_extract(self, html: str, base_url: str = "") -> Tuple[str, str]:
         """Clean unwanted tags from HTML and extract main body content & page title.
 
